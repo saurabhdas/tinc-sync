@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+"""
+tinc sync: admin
+----------------
+
+"""
+
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--tinc-cfg-root', help='where does tinc look for configuration', type=str, default='/usr/local/etc/tinc')
+parser.add_argument('-n', '--network', help='name of the network to administer', type=str)
+
+# parser.add_argument('-p', '--param', help='override model param', action='append', default=[])
+# parser.add_argument('--train', action='store_true')
+# parser.add_argument('--resume-train', help='epoch to resume training, -1 for latest', type=int)
+# parser.add_argument('--check-save', action='store_true')
+# parser.add_argument('--save-positions', help='save positions to disk while checking', action='store_true')
+# parser.add_argument('--epochs', help='epochs to train/check (format: a,b,x:y)', type=str)
+# parser.add_argument('--export', help='export which epoch (only 1 at at time)', type=int)
+# parser.add_argument('--verbose', help='print more things', action='store_true')
+# parser.add_argument('--debug', help='drop into an IPython debugging shell if an error occurs or "bp()" is called', action='store_true')
+args = parser.parse_args()
