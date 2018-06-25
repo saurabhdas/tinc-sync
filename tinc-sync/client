@@ -6,7 +6,7 @@ tinc sync: client
 
 """
 
-import argparse, os, sys, subprocess, pathlib
+import argparse, os, sys, subprocess, pathlib, traceback, shutil
 
 # Setup and parse command line arguments
 parser = argparse.ArgumentParser()
@@ -21,29 +21,30 @@ parser.add_argument('--bootstrap', help='do a manual sync from the provided file
 parser.add_argument('--run', help='run the network in detached mode for debugging purposes', action='store_true')
 args = parser.parse_args()
 
-########################################
-# Check that the config directory exists
-if not os.path.isdir(args.tinc_cfg_root):
-    print('Tinc configuration root path "%s" does not exist or is not a directory' % args.tinc_cfg_root)
-    sys.exit(1)
+try:
 
-
-###################
-# Add a new network
-if args.add:
-    if not args.network:
-        print('Network name required to add')
+    ########################################
+    # Check that the config directory exists
+    if not os.path.isdir(args.tinc_cfg_root):
+        print('Tinc configuration root path "%s" does not exist or is not a directory' % args.tinc_cfg_root)
         sys.exit(1)
 
-    if os.path.isdir('%s/%s' % (args.tinc_cfg_root, args.network)):
-        print('Network with name "%s" already exists. Cannot add a new one' % args.network)
-        sys.exit(1)
 
-    print('Adding new network "%s"' % args.network)
-    try:
+    ###################
+    # Add a new network
+    if args.add:
+        if not args.network:
+            print('Network name required to add')
+            sys.exit(1)
+
+        if os.path.isdir('%s/%s' % (args.tinc_cfg_root, args.network)):
+            print('Network with name "%s" already exists. Cannot add a new one' % args.network)
+            sys.exit(1)
+
+        print('Adding new network "%s"' % args.network)
         os.mkdir('%s/%s' % (args.tinc_cfg_root, args.network))
         command = ['tincd', '--config=%s/%s' % (args.tinc_cfg_root, args.network), '--generate-keys=4096']
-        subprocess.run(' '.join(command), shell=True, input='\n\n', encoding='ascii')
+        subprocess.run(' '.join(command), shell=True, input='\n\n', encoding='ascii', check=False)
 
         if not os.path.isfile('%s/%s/rsa_key.priv' % (args.tinc_cfg_root, args.network)):
             print('ERROR: Could not find the private key.')
@@ -57,80 +58,113 @@ if args.add:
         print('Give the following public key to your tinc administrator for network "%s":' % args.network)
         print(public_key)
 
-    except PermissionError as e:
-        print(e)
-        sys.exit(1)
 
-###################
-# Set or unset boot
-if args.boot or args.noboot:
-    if args.boot and args.noboot:
-        assert False
+    ###################
+    # Set or unset boot
+    if args.boot or args.noboot:
+        if args.boot and args.noboot:
+            assert False
 
-    if not args.network:
-        print('Network name required to set/unset boot')
-        sys.exit(1)
+        if not args.network:
+            print('Network name required to set/unset boot')
+            sys.exit(1)
 
-    if not os.path.isfile('%s/%s/tinc.conf' % (args.tinc_cfg_root, args.network)):
-        print('Network "%s" not found at "%s/%s/tinc.conf"' % (args.network, args.tinc_cfg_root, args.network))
-        sys.exit(1)
+        if not os.path.isfile('%s/%s/tinc.conf' % (args.tinc_cfg_root, args.network)):
+            print('Network "%s" not found at "%s/%s/tinc.conf"' % (args.network, args.tinc_cfg_root, args.network))
+            sys.exit(1)
 
-    if os.path.isfile('%s/nets.boot' % args.tinc_cfg_root):
-        startup_nets = pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).read_text().splitlines()
-        startup_nets = set([x for x in startup_nets if len(x)>0])
-    else:
-        startup_nets = set()
+        if os.path.isfile('%s/nets.boot' % args.tinc_cfg_root):
+            startup_nets = pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).read_text().splitlines()
+            startup_nets = set([x for x in startup_nets if len(x)>0])
+        else:
+            startup_nets = set()
 
-    if args.boot:
-        startup_nets.add(args.network)
-    if args.noboot:
-        startup_nets.discard(args.network)
+        if args.boot:
+            startup_nets.add(args.network)
+        if args.noboot:
+            startup_nets.discard(args.network)
 
-    print('Setting autostart on boot for "%s" to %s' % (args.network, args.boot))
-    pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).write_text('\n'.join(list(startup_nets)) + '\n')
-
-
-#################################
-# Process a server bootstrap file
-if args.bootstrap:
-    pass
-
-
-########################
-# List existing networks
-if args.list:
-    print('Current tinc configuration:')
-
-    if os.path.isfile('%s/nets.boot' % args.tinc_cfg_root):
-        startup_nets = pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).read_text().splitlines()
-    else:
-        startup_nets = []
+        print('Setting autostart on boot for "%s" to %s' % (args.network, args.boot))
+        pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).write_text('\n'.join(list(startup_nets)) + '\n')
     
-    cfg_folder_files = os.listdir(args.tinc_cfg_root)
-    
-    for cff in cfg_folder_files:
-        if not os.path.isdir('%s/%s' % (args.tinc_cfg_root, cff)):
-            continue
-        if not os.path.isfile('%s/%s/tinc.conf' % (args.tinc_cfg_root, cff)):
-            continue
 
-        has_boot = 'boot' if cff in startup_nets else 'noboot'
-        print(cff, has_boot)
+    #################################
+    # Process a server bootstrap file
+    if args.bootstrap:
+        if not args.network:
+            print('Network name required to bootstrap')
+            sys.exit(1)
+
+        if not os.path.isdir('%s/%s' % (args.tinc_cfg_root, args.network)):
+            print('Network with name "%s" does not exist. Please add network before bootstrapping' % args.network)
+            sys.exit(1)
+
+        if not os.path.isfile(args.bootstrap):
+            print('bootstrap file not found at location "%s"' % args.bootstrap)
+            sys.exit(1)
+
+        clear_folder = os.listdir('%s/%s' % (args.tinc_cfg_root, args.network))
+        clear_folder.remove('rsa_key.priv')
+        clear_folder.remove('rsa_key.pub')
+        for cf in clear_folder:
+            full_path = '%s/%s/%s' % (args.tinc_cfg_root, args.network, cf)
+            if os.path.isdir(full_path):
+                shutil.rmtree(full_path)
+            else:
+                os.remove(full_path)
+
+        try:
+            command = ['tar', '-xf', args.bootstrap, '-C', '%s/%s' % (args.tinc_cfg_root, args.network)]
+            subprocess.run(' '.join(command), shell=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print('ERROR: Could not extract bootstrap archive.')
+            sys.exit(1)
 
 
-#########################
-# Run tincd in debug mode
+    ########################
+    # List existing networks
+    if args.list:
+        print('Current tinc configuration:')
 
-if args.run:
-    if not args.network:
-        print('Network name required to run')
-        sys.exit(1)
+        if os.path.isfile('%s/nets.boot' % args.tinc_cfg_root):
+            startup_nets = pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).read_text().splitlines()
+        else:
+            startup_nets = []
+        
+        cfg_folder_files = os.listdir(args.tinc_cfg_root)
+        
+        for cff in cfg_folder_files:
+            if not os.path.isdir('%s/%s' % (args.tinc_cfg_root, cff)):
+                continue
+            if not os.path.isfile('%s/%s/tinc.conf' % (args.tinc_cfg_root, cff)):
+                continue
 
-    print('Running network "%s" in debug mode' % args.network)
-    try:
+            has_boot = 'boot' if cff in startup_nets else 'noboot'
+            print(cff, has_boot)
+
+
+    #########################
+    # Run tincd in debug mode
+
+    if args.run:
+        if not args.network:
+            print('Network name required to run')
+            sys.exit(1)
+
+        print('Running network "%s" in debug mode' % args.network)
         command = ['tincd', '--config=%s/%s' % (args.tinc_cfg_root, args.network), '-D', '-d3']
-        subprocess.run(' '.join(command), shell=True)
+        subprocess.run(' '.join(command), shell=True, check=True)
 
-    except PermissionError as e:
-        print(e)
-        sys.exit(1)
+except PermissionError as e:
+    print(e)
+    sys.exit(1)
+
+except KeyboardInterrupt:
+    sys.exit(1)
+
+except Exception as e:
+    print('Caught some unhandled exception. YOU SHOULD TELL THE MAINTAINER THAT SOMETHING WAS UNHANDLED AND NEEDS LOOKING AT')
+    print('Details:')
+    print(e)
+    traceback.print_exc()
+    sys.exit(1)

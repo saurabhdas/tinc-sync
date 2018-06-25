@@ -1,0 +1,24 @@
+{
+    "network_name": "sample_net",
+    "public_keys_path": "/Users/sd/tmp/keys",
+    "output_path": "/Users/sd/tmp/generated/",
+    "admin_node": "node1",
+    "vpn_subnet": "10.52.0.0/16",
+
+    "nodes": {
+        "node1": {
+            "os": "linux",
+            "tinc_cfg_root": "/usr/local/etc/tinc",
+            "auto_update": true,
+            "connect_to": [],
+            "public_ips": ["10.42.42.42"]
+        },
+        "node2": {
+            "os": "linux",
+            "tinc_cfg_root": "/usr/local/etc/tinc",
+            "auto_update": false,
+            "connect_to": ["node1"],
+            "local_discovery": true
+        }
+    }
+}

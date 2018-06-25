@@ -6,19 +6,176 @@ tinc sync: admin
 
 """
 
-import argparse
+import argparse, os, sys, json, pathlib, shutil, traceback, ipaddress
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--tinc-cfg-root', help='where does tinc look for configuration', type=str, default='/usr/local/etc/tinc')
-parser.add_argument('-n', '--network', help='name of the network to administer', type=str)
-
-# parser.add_argument('-p', '--param', help='override model param', action='append', default=[])
-# parser.add_argument('--train', action='store_true')
-# parser.add_argument('--resume-train', help='epoch to resume training, -1 for latest', type=int)
-# parser.add_argument('--check-save', action='store_true')
-# parser.add_argument('--save-positions', help='save positions to disk while checking', action='store_true')
-# parser.add_argument('--epochs', help='epochs to train/check (format: a,b,x:y)', type=str)
-# parser.add_argument('--export', help='export which epoch (only 1 at at time)', type=int)
-# parser.add_argument('--verbose', help='print more things', action='store_true')
-# parser.add_argument('--debug', help='drop into an IPython debugging shell if an error occurs or "bp()" is called', action='store_true')
+parser.add_argument('config', help='network to administer', type=argparse.FileType('r'))
+parser.add_argument('--generate', help='generate output', action='store_true')
 args = parser.parse_args()
+
+try:
+    cfg_json = json.loads(args.config.read())
+except Exception as e:
+    print('ERROR: Failed to read and parse config file:')
+    print(e)
+    sys.exit(1)
+
+class NodeConfig:
+    def __init__(self, node_name, node_json, node_addr, vpn_subnet):
+        assert type(node_name) is str, 'INTERNAL ERROR (Json dict keys can only be strings?)'
+        assert type(node_json) is dict, 'Node definition for "%s" expected to be a dictionary' % node_name
+
+        self.name = node_name
+        self.is_admin = False
+
+        assert 'os' in node_json, 'Node "%s": expected key "os" not found in node definition' % node_name
+        assert type(node_json['os']) is str, 'Node "%s": key "os" expected to be of type str' % node_name
+        assert node_json['os'] in ['linux', 'darwin'], 'Node "%s": key "os" expected to have values in [linux, darwin]' % node_name
+        self.os = node_json['os']
+
+        assert 'tinc_cfg_root' in node_json, 'Node "%s": expected key "tinc_cfg_root" not found in node definition' % node_name
+        assert type(node_json['tinc_cfg_root']) is str, 'Node "%s": key "tinc_cfg_root" expected to be of type str' % node_name
+        assert node_json['tinc_cfg_root'][0] == '/', 'Node "%s": "tinc_cfg_root" "%s" expected to be an absolute path' % (node_name, node_json['tinc_cfg_root'])
+        self.tinc_cfg_root = node_json['tinc_cfg_root']
+
+        self.auto_update = False
+        if 'auto_update' in node_json:
+            assert type(node_json['auto_update'] is bool), 'Node "%s": key "auto_update" expected to be of type bool' % node_name
+            self.auto_update = node_json['auto_update']
+
+        self.connect_to = []
+        if 'connect_to' in node_json:
+            assert type(node_json['connect_to'] is list), 'Node "%s": key "connect_to" expected to be of type list' % node_name
+            self.connect_to = node_json['connect_to']
+
+        self.public_ips = []
+        if 'public_ips' in node_json:
+            assert type(node_json['public_ips'] is list), 'Node "%s": key "public_ips" expected to be of type list' % node_name
+            self.public_ips = node_json['public_ips']
+
+        self.local_discovery = False
+        if 'local_discovery' in node_json:
+            assert type(node_json['local_discovery'] is bool), 'Node "%s": key "local_discovery" expected to be of type bool' % node_name
+            self.local_discovery = node_json['local_discovery']
+
+        self.subnet_ip = node_addr
+        self.subnet_mask = vpn_subnet.netmask
+
+
+class AdminConfig:
+    def __init__(self, cfg_json):
+        assert 'network_name' in cfg_json, 'expected key "network_name" not found in config'
+        assert type(cfg_json['network_name']) is str, 'Key "network_name" expected to be of type str'
+        self.network_name = cfg_json['network_name']
+
+        assert 'public_keys_path' in cfg_json, 'expected key "public_keys_path" not found in config'
+        assert type(cfg_json['public_keys_path']) is str, 'Key "public_keys_path" expected to be of type str'
+        assert cfg_json['public_keys_path'][0] == '/', '"public_keys_path" "%s" expected to be an absolute path' % cfg_json['public_keys_path']
+        assert os.path.isdir(cfg_json['public_keys_path']), '"public_keys_path" "%s" does not exist or is not a directory' % cfg_json['public_keys_path']
+        self.public_keys_path = cfg_json['public_keys_path']
+
+        assert 'output_path' in cfg_json, 'expected key "output_path" not found in config'
+        assert type(cfg_json['output_path']) is str, 'Key "output_path" expected to be of type str'
+        assert cfg_json['output_path'][0] == '/', '"output_path" "%s" expected to be an absolute path' % cfg_json['output_path']
+        assert os.path.isdir(cfg_json['output_path']), '"output_path" "%s" does not exist or is not a directory' % cfg_json['output_path']
+        self.output_path = cfg_json['output_path']
+
+        assert 'admin_node' in cfg_json, 'expected key "admin_node" not found in config'
+        assert type(cfg_json['admin_node']) is str, 'Key "admin_node" expected to be of type str'
+        self.admin_node = cfg_json['admin_node']
+
+        assert 'vpn_subnet' in cfg_json, 'expected key "vpn_subnet" not found in config'
+        assert type(cfg_json['vpn_subnet']) is str, 'Key "vpn_subnet" expected to be of type str'
+        try:
+            self.vpn_subnet = ipaddress.ip_network(cfg_json['vpn_subnet'])
+            self.vpn_hosts = list(ipaddress.ip_network(self.vpn_subnet).hosts())
+        except ValueError as e:
+            print('Could not parse "vpn_subnet":', e)
+            sys.exit(1)
+
+        assert 'nodes' in cfg_json, 'expected key "nodes" not found in config'
+        assert type(cfg_json['nodes']) is dict, 'Key "nodes" expected to be a dictionary'
+        self.nodes = { n: NodeConfig(n, j, h, self.vpn_subnet) for (n,j), h in zip(cfg_json['nodes'].items(), self.vpn_hosts) }
+
+        assert self.admin_node in self.nodes, 'Admin node "%s" not found in "nodes"' % self.admin_node
+
+        for node_name, node_cfg in self.nodes.items():
+            for connect_to_name in node_cfg.connect_to:
+                assert connect_to_name in self.nodes, 'Node "%s": Key "connect_to": Item "%s" not found in "nodes"' % (node_name, connect_to_name)
+
+
+try:
+    cfg = AdminConfig(cfg_json)
+
+    shutil.rmtree(cfg.output_path)
+    os.mkdir(cfg.output_path)
+    os.mkdir('%s/hosts' % cfg.output_path)
+
+    for node_name, node_cfg in cfg.nodes.items():
+        node_path = '%s/%s' % (cfg.output_path, node_name)
+        os.mkdir(node_path)
+
+        # Writing tinc.conf
+        with open('%s/tinc.conf' % node_path, 'w') as tinc_conf:
+            tinc_conf.write('Name = %s\n' % node_name)
+
+            if node_cfg.os == 'linux':
+                device_type = 'tun'
+            elif node_cfg.os == 'darwin':
+                device_type = 'utun'
+            else:
+                assert False, 'Unknown OS "%s"' % node_cfg.os
+
+            tinc_conf.write('DeviceType = %s\n' % device_type)
+
+            tinc_conf.write('AddressFamily = ipv4\n')
+
+            for connect_to_name in node_cfg.connect_to:
+                tinc_conf.write('ConnectTo = %s\n' % connect_to_name)
+
+            if node_cfg.local_discovery:
+                local_discovery = 'yes'
+            else:
+                local_discovery = 'no'
+            tinc_conf.write('LocalDiscovery = %s\n' % local_discovery)
+
+        # Writing tinc-up
+        with open('%s/tinc-up' % node_path, 'w') as tinc_up:
+            tinc_up.write('#!/bin/bash\n')
+            tinc_up.write('ifconfig $INTERFACE %s netmask %s\n' % (node_cfg.subnet_ip.exploded, node_cfg.subnet_mask.exploded))
+
+        # Writing tinc-down
+        with open('%s/tinc-down' % node_path, 'w') as tinc_down:
+            tinc_down.write('#!/bin/bash\n')
+            tinc_down.write('ifconfig $INTERFACE down\n')
+
+        # Writing hosts files
+        with open('%s/hosts/%s' % (cfg.output_path, node_name), 'w') as hosts_conf:
+            for public_ip in node_cfg.public_ips:
+                hosts_conf.write('Address = %s\n' % public_ip)
+
+            hosts_conf.write('Subnet = %s\n' % node_cfg.subnet_ip)
+
+            pubkey = pathlib.Path('%s/%s.pub' % (cfg.public_keys_path, node_name)).read_text()
+            hosts_conf.write(pubkey)
+            hosts_conf.write('\n')
+
+
+
+except AssertionError as e:
+    print('ERROR:', e)
+    sys.exit(1)
+
+except PermissionError as e:
+    print(e)
+    sys.exit(1)
+
+except KeyboardInterrupt:
+    sys.exit(1)
+
+except Exception as e:
+    print('Caught some unhandled exception. YOU SHOULD TELL THE MAINTAINER THAT SOMETHING WAS UNHANDLED AND NEEDS LOOKING AT')
+    print('Details:')
+    print(e)
+    traceback.print_exc()
+    sys.exit(1)
