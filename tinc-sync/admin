@@ -6,7 +6,7 @@ tinc sync: admin
 
 """
 
-import argparse, os, sys, json, pathlib, shutil, traceback, ipaddress
+import argparse, os, sys, json, pathlib, shutil, traceback, ipaddress, subprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument('config', help='network to administer', type=argparse.FileType('r'))
@@ -26,7 +26,6 @@ class NodeConfig:
         assert type(node_json) is dict, 'Node definition for "%s" expected to be a dictionary' % node_name
 
         self.name = node_name
-        self.is_admin = False
 
         assert 'os' in node_json, 'Node "%s": expected key "os" not found in node definition' % node_name
         assert type(node_json['os']) is str, 'Node "%s": key "os" expected to be of type str' % node_name
@@ -58,8 +57,8 @@ class NodeConfig:
             assert type(node_json['local_discovery'] is bool), 'Node "%s": key "local_discovery" expected to be of type bool' % node_name
             self.local_discovery = node_json['local_discovery']
 
-        self.subnet_ip = node_addr
-        self.subnet_mask = vpn_subnet.netmask
+        self.ip_address = ipaddress.ip_network(vpn_subnet.exploded)
+        self.ip_address.network_address = node_addr
 
 
 class AdminConfig:
@@ -79,6 +78,8 @@ class AdminConfig:
         assert cfg_json['output_path'][0] == '/', '"output_path" "%s" expected to be an absolute path' % cfg_json['output_path']
         assert os.path.isdir(cfg_json['output_path']), '"output_path" "%s" does not exist or is not a directory' % cfg_json['output_path']
         self.output_path = cfg_json['output_path']
+        if self.output_path[-1] == '/':
+            self.output_path = self.output_path[:-1]
 
         assert 'admin_node' in cfg_json, 'expected key "admin_node" not found in config'
         assert type(cfg_json['admin_node']) is str, 'Key "admin_node" expected to be of type str'
@@ -111,6 +112,13 @@ try:
     os.mkdir(cfg.output_path)
     os.mkdir('%s/hosts' % cfg.output_path)
 
+    ssh_authorized_keys_filename = os.path.expanduser('~/.ssh/authorized_keys')
+    if os.path.isfile(ssh_authorized_keys_filename):
+        with open(ssh_authorized_keys_filename, 'r') as ssh_authorized_keys_file:
+            ssh_authorized_keys_lines = ssh_authorized_keys_file.readlines()
+            ssh_authorized_keys_lines = [x for x in ssh_authorized_keys_lines if x.find('# Added by tinc-sync network=%s' % cfg.network_name) == -1]
+        pathlib.Path(ssh_authorized_keys_filename).write_text(''.join(ssh_authorized_keys_lines))
+
     for node_name, node_cfg in cfg.nodes.items():
         node_path = '%s/%s' % (cfg.output_path, node_name)
         os.mkdir(node_path)
@@ -142,24 +150,71 @@ try:
         # Writing tinc-up
         with open('%s/tinc-up' % node_path, 'w') as tinc_up:
             tinc_up.write('#!/bin/bash\n')
-            tinc_up.write('ifconfig $INTERFACE %s netmask %s\n' % (node_cfg.subnet_ip.exploded, node_cfg.subnet_mask.exploded))
+            if node_cfg.os == 'linux':
+                tinc_up.write('ifconfig $INTERFACE %s netmask %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
+            elif node_cfg.os == 'darwin':
+                tinc_up.write('ifconfig $INTERFACE inet %s %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
+                tinc_up.write('route -n add -net %s %s\n' % (node_cfg.ip_address.supernet(0).exploded, node_cfg.ip_address.network_address.exploded))
+            else:
+                assert False, 'Unknown OS "%s"' % node_cfg.os
+        os.chmod('%s/tinc-up' % node_path, 0o755)
 
         # Writing tinc-down
         with open('%s/tinc-down' % node_path, 'w') as tinc_down:
             tinc_down.write('#!/bin/bash\n')
             tinc_down.write('ifconfig $INTERFACE down\n')
+        os.chmod('%s/tinc-down' % node_path, 0o755)
 
         # Writing hosts files
         with open('%s/hosts/%s' % (cfg.output_path, node_name), 'w') as hosts_conf:
             for public_ip in node_cfg.public_ips:
                 hosts_conf.write('Address = %s\n' % public_ip)
 
-            hosts_conf.write('Subnet = %s\n' % node_cfg.subnet_ip)
+            hosts_conf.write('Subnet = %s\n' % node_cfg.ip_address.network_address.exploded)
 
-            pubkey = pathlib.Path('%s/%s.pub' % (cfg.public_keys_path, node_name)).read_text()
+            pub_key_name = '%s/%s.pub' % (cfg.public_keys_path, node_name)
+            assert os.path.isfile(pub_key_name), 'Public key file "%s" not found' % pub_key_name
+            pubkey = pathlib.Path(pub_key_name).read_text()
             hosts_conf.write(pubkey)
             hosts_conf.write('\n')
 
+            if node_name != cfg.admin_node and node_cfg.auto_update:
+                try:
+                    command = ['ssh-keygen', '-f', pub_key_name, '-i -m pem']
+                    retval = subprocess.run(' '.join(command), shell=True, check=True, stdout=subprocess.PIPE).stdout.decode('utf-8')
+                    assert retval[-1] == '\n', 'INTERNAL ERROR: ssh key expected to end in newline'     # TODO Raise an exception instead of asserting
+                except subprocess.CalledProcessError as e:
+                    print('ERROR: Could not convert public key into ssh compatible format')
+                    sys.exit(1)
+                with open(ssh_authorized_keys_filename, 'a') as ssh_authorized_keys_file:
+                    this_authorized_key = 'restrict %s # Added by tinc-sync network=%s node=%s\n' % (retval[:-1], cfg.network_name, node_name)
+                    ssh_authorized_keys_file.write(this_authorized_key)
+
+        # Writing admin-up
+        if node_name != cfg.admin_node and node_cfg.auto_update:
+            with open('%s/admin-up.tmp' % node_path, 'w') as admin_up:
+                admin_up.write('#!/bin/bash\n')
+                admin_up.write('set -euxo pipefail\n')
+                admin_up.write('echo "$(date) ""Running admin-up script on network %s" >> /tmp/tinc-sync.log\n' % cfg.network_name)
+
+
+    # Copy the hosts file to each node and tarzip it up
+    for node_name, node_cfg in cfg.nodes.items():
+        node_path = '%s/%s' % (cfg.output_path, node_name)
+
+        shutil.copytree('%s/hosts' % cfg.output_path, '%s/hosts' % node_path)
+        if node_name != cfg.admin_node and node_cfg.auto_update:
+            os.chmod('%s/admin-up.tmp' % node_path, 0o755)
+            os.rename('%s/admin-up.tmp' % node_path, '%s/hosts/%s-up' % (node_path, cfg.admin_node))
+
+        try:
+            command = ['tar', '-C', node_path, '-cjf', '%s/%s.tar.bz2' % (cfg.output_path, node_name), 'hosts', 'tinc.conf', 'tinc-up', 'tinc-down']
+            subprocess.run(' '.join(command), shell=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print('ERROR: Could not compress bootstrap archive.')
+            sys.exit(1)
+
+    # Add entries for authorized ssh keys for the auto update
 
 
 except AssertionError as e:
