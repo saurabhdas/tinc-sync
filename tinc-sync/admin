@@ -43,7 +43,7 @@ function_update() {{
     fi
     echo "$(date) {0}: ""Updating configuration" >> /tmp/tinc-sync.log
     mv /tmp/{0}-{2}-new.tar.bz2 /tmp/{0}-{2}-old.tar.bz2
-    ls {4}/{0}/ | xargs rm -fr
+    ls {4}/{0}/ | grep -v "rsa_key.priv" | grep -v "rsa_key.pub" | xargs rm -fr
     tar -xf /tmp/{0}-{2}-old.tar.bz2 -C {4}/{0}
     echo "$(date) {0}: ""Finished admin-up script" >> /tmp/tinc-sync.log
     exit 0
