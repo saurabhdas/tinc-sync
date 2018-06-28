@@ -36,6 +36,7 @@ function_update() {{
         set -e
         if [ $ret -eq 0 ]; then
             echo "$(date) {0}: ""Got identical bootstrap files. No need to update" >> /tmp/tinc-sync.log
+            echo "$(date) {0}: ""Finished admin-up script" >> /tmp/tinc-sync.log
             exit 0
         fi
     fi
@@ -251,13 +252,6 @@ try:
     print('')
     print('To update the admin node, do:')
     print('\t [sudo] tinc-sync/client -n %s --bootstrap %s/%s.tar.bz2' % (cfg.network_name, cfg.output_path, cfg.admin_node))
-    # print('')
-    # print('To update client nodes, do:')
-    # for node_name, node_cfg in cfg.nodes.items():
-    #     if node_name == cfg.admin_node:
-    #         continue
-    #     print('\t%s -> scp -i %s/%s/rsa_key.priv %s@%s:%s/%s.tar.bz2 /tmp/ && [sudo] tinc-sync/client -n %s --bootstrap /tmp/%s.tar.bz2 --tinc-cfg-root %s' %
-    #         (node_name, node_cfg.tinc_cfg_root, cfg.network_name, os.getlogin(), cfg.nodes[cfg.admin_node].ip_address.network_address.exploded, cfg.output_path, node_name, cfg.network_name, node_name, node_cfg.tinc_cfg_root))
 
 
 except AssertionError as e:
