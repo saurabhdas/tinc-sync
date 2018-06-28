@@ -14,9 +14,6 @@ parser.add_argument('--tinc-cfg-root', help='where does tinc look for configurat
 parser.add_argument('-l', '--list', help='list configured tinc vpn networks on this client', action='store_true')
 parser.add_argument('-n', '--network', help='name of the network to administer', type=str)
 parser.add_argument('--add', help='add a new network with name specified by --network', action='store_true')
-group1 = parser.add_mutually_exclusive_group(required=False)
-group1.add_argument('--boot', help='set network autostart on boot', action='store_true')
-group1.add_argument('--noboot', help='unset network autostart on boot', action='store_true')
 parser.add_argument('--bootstrap', help='do a manual sync from the provided file', type=str)
 parser.add_argument('--run', help='run the network in detached mode for debugging purposes', action='store_true')
 args = parser.parse_args()
@@ -57,35 +54,6 @@ try:
         public_key = pathlib.Path('%s/%s/rsa_key.pub' % (args.tinc_cfg_root, args.network)).read_text()
         print('Give the following public key to your tinc administrator for network "%s":' % args.network)
         print(public_key)
-
-
-    ###################
-    # Set or unset boot
-    if args.boot or args.noboot:
-        if args.boot and args.noboot:
-            assert False
-
-        if not args.network:
-            print('Network name required to set/unset boot')
-            sys.exit(1)
-
-        if not os.path.isfile('%s/%s/tinc.conf' % (args.tinc_cfg_root, args.network)):
-            print('Network "%s" not found at "%s/%s/tinc.conf"' % (args.network, args.tinc_cfg_root, args.network))
-            sys.exit(1)
-
-        if os.path.isfile('%s/nets.boot' % args.tinc_cfg_root):
-            startup_nets = pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).read_text().splitlines()
-            startup_nets = set([x for x in startup_nets if len(x)>0])
-        else:
-            startup_nets = set()
-
-        if args.boot:
-            startup_nets.add(args.network)
-        if args.noboot:
-            startup_nets.discard(args.network)
-
-        print('Setting autostart on boot for "%s" to %s' % (args.network, args.boot))
-        pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).write_text('\n'.join(list(startup_nets)) + '\n')
     
 
     #################################
@@ -120,16 +88,13 @@ try:
             print('ERROR: Could not extract bootstrap archive.')
             sys.exit(1)
 
+        print('For auto-startup, see: https://www.tinc-vpn.org/documentation/Automatically-starting-tinc.html')
+
 
     ########################
     # List existing networks
     if args.list:
         print('Current tinc configuration:')
-
-        if os.path.isfile('%s/nets.boot' % args.tinc_cfg_root):
-            startup_nets = pathlib.Path('%s/nets.boot' % args.tinc_cfg_root).read_text().splitlines()
-        else:
-            startup_nets = []
         
         cfg_folder_files = os.listdir(args.tinc_cfg_root)
         
@@ -139,8 +104,7 @@ try:
             if not os.path.isfile('%s/%s/tinc.conf' % (args.tinc_cfg_root, cff)):
                 continue
 
-            has_boot = 'boot' if cff in startup_nets else 'noboot'
-            print(cff, has_boot)
+            print(cff)
 
 
     #########################
