@@ -19,6 +19,37 @@ except Exception as e:
     print(e)
     sys.exit(1)
 
+
+admin_up_script_format = """
+#!/bin/bash
+
+set -euxo pipefail
+
+function_update() {
+    echo "$(date) {0}: ""Starting admin-up script" >> /tmp/tinc-sync.log
+
+    scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i {4}{0}/rsa_key.priv ubuntu@{1}:{3}/{2}.tar.bz2 /tmp/{0}-{2}-new.tar.bz2
+    if [ -f /tmp/{0}-{2}-old.tar.bz2 ]; then
+        set +e
+        cmp --silent /tmp/{0}-{2}-new.tar.bz2 /tmp/{0}-{2}-old.tar.bz2
+        ret=$?
+        set -e
+        if [ $ret -eq 0 ]; then
+            echo "$(date) {0}: ""Got identical bootstrap files. No need to update" >> /tmp/tinc-sync.log
+            exit 0
+        fi
+    fi
+    echo "$(date) {0}: ""Updating configuration" >> /tmp/tinc-sync.log
+    mv /tmp/{0}-{2}-new.tar.bz2 /tmp/{0}-{2}-old.tar.bz2
+    ls {4}/{0}/ | xargs rm -fr
+    tar -xf /tmp/{0}-{2}-old.tar.bz2 -C {4}/{0}
+    echo "$(date) {0}: ""Finished admin-up script" >> /tmp/tinc-sync.log
+    exit 0
+}
+
+function_update &
+"""
+
 class NodeConfig:
     def __init__(self, node_name, node_json, node_addr, vpn_subnet):
         assert type(node_name) is str, 'INTERNAL ERROR (Json dict keys can only be strings?)'
@@ -193,9 +224,12 @@ try:
         # Writing admin-up
         if node_name != cfg.admin_node and node_cfg.auto_update:
             with open('%s/admin-up.tmp' % node_path, 'w') as admin_up:
-                admin_up.write('#!/bin/bash\n')
-                admin_up.write('set -euxo pipefail\n')
-                admin_up.write('echo "$(date) ""Running admin-up script on network %s" >> /tmp/tinc-sync.log\n' % cfg.network_name)
+                admin_up.write(admin_up_script_format.format(
+                    cfg.network_name,                                               # format placeholder {0}
+                    cfg.nodes[cfg.admin_node].ip_address.network_address.exploded,  # format placeholder {1}
+                    node_name,                                                      # format placeholder {2}
+                    cfg.output_path,                                                # format placeholder {3}
+                    node_cfg.tinc_cfg_root))                                        # format placeholder {4}
 
 
     # Copy the hosts file to each node and tarzip it up
@@ -217,13 +251,13 @@ try:
     print('')
     print('To update the admin node, do:')
     print('\t [sudo] tinc-sync/client -n %s --bootstrap %s/%s.tar.bz2' % (cfg.network_name, cfg.output_path, cfg.admin_node))
-    print('')
-    print('To update client nodes, do:')
-    for node_name, node_cfg in cfg.nodes.items():
-        if node_name == cfg.admin_node:
-            continue
-        print('\t%s -> scp -i %s/%s/rsa_key.priv %s@%s:%s/%s.tar.bz2 /tmp/ && [sudo] tinc-sync/client -n %s --bootstrap /tmp/%s.tar.bz2 --tinc-cfg-root %s' %
-            (node_name, node_cfg.tinc_cfg_root, cfg.network_name, os.getlogin(), cfg.nodes[cfg.admin_node].ip_address.network_address.exploded, cfg.output_path, node_name, cfg.network_name, node_name, node_cfg.tinc_cfg_root))
+    # print('')
+    # print('To update client nodes, do:')
+    # for node_name, node_cfg in cfg.nodes.items():
+    #     if node_name == cfg.admin_node:
+    #         continue
+    #     print('\t%s -> scp -i %s/%s/rsa_key.priv %s@%s:%s/%s.tar.bz2 /tmp/ && [sudo] tinc-sync/client -n %s --bootstrap /tmp/%s.tar.bz2 --tinc-cfg-root %s' %
+    #         (node_name, node_cfg.tinc_cfg_root, cfg.network_name, os.getlogin(), cfg.nodes[cfg.admin_node].ip_address.network_address.exploded, cfg.output_path, node_name, cfg.network_name, node_name, node_cfg.tinc_cfg_root))
 
 
 except AssertionError as e:
