@@ -20,8 +20,8 @@ except Exception as e:
     sys.exit(1)
 
 
-admin_up_script_format = """
-#!/bin/bash
+admin_up_script_format = \
+"""#!/bin/bash
 
 set -euxo pipefail
 
