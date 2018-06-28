@@ -214,9 +214,13 @@ try:
             print('ERROR: Could not compress bootstrap archive.')
             sys.exit(1)
 
+    print('')
     print('To update the admin node, do:')
     print('tinc-sync/client -n %s --bootstrap %s/%s.tar.bz2' % (cfg.network_name, cfg.output_path, cfg.admin_node))
-    
+    print('')
+    print('To update client nodes, do:')
+    for node_name, node_cfg in cfg.nodes.items():
+        print('%s -> scp %s@%s:%s/%s.tar.bz2 /tmp/ && tinc-sync/client -n %s --bootstrap /tmp/%s.tar.bz2' % (node_name, os.getlogin(), cfg.nodes[cfg.admin_node].ip_address.exploded, cfg.output_path, node_name, cfg.network_name, node_name))
 
 
 except AssertionError as e:
