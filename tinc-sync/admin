@@ -141,7 +141,7 @@ class AdminConfig:
                 'lzo_fast': 10,
                 'lzo_best': 11
             }
-            assert cfg_json['compression'] in compression_map.keys(), 'Did not understand "compression" value "%s". Valid values are %s' % (cfg_json['compression'], compression_map.keys())
+            assert cfg_json['compression'] in compression_map.keys(), 'Did not understand "compression" value "%s". Valid values are %s' % (cfg_json['compression'], list(compression_map.keys()))
             self.compression = compression_map[cfg_json['compression']]
 
         assert 'nodes' in cfg_json, 'expected key "nodes" not found in config'
