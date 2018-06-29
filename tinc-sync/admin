@@ -189,6 +189,9 @@ try:
 
             tinc_conf.write('AddressFamily = ipv4\n')
 
+            if node_cfg.bind_to_interface:
+                tinc_conf.write('BindToInterface = %s\n' % node_cfg.bind_to_interface)
+
             for connect_to_name in node_cfg.connect_to:
                 tinc_conf.write('ConnectTo = %s\n' % connect_to_name)
 
@@ -197,6 +200,9 @@ try:
             else:
                 local_discovery = 'no'
             tinc_conf.write('LocalDiscovery = %s\n' % local_discovery)
+
+            if cfg.compression:
+                tinc_conf.write('Compression = %s\n' % cfg.compression)
 
         # Writing tinc-up
         with open('%s/tinc-up' % node_path, 'w') as tinc_up:
