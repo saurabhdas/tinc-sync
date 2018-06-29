@@ -89,6 +89,11 @@ class NodeConfig:
             assert type(node_json['local_discovery'] is bool), 'Node "%s": key "local_discovery" expected to be of type bool' % node_name
             self.local_discovery = node_json['local_discovery']
 
+        self.bind_to_interface = None
+        if 'bind_to_interface' in node_json:
+            assert type(node_json['bind_to_interface']) is str, 'Node "%s": key "bind_to_interface" expected to be of type str' % node_name
+            self.bind_to_interface = node_json['bind_to_interface']
+
         self.ip_address = ipaddress.ip_network(vpn_subnet.exploded)
         self.ip_address.network_address = node_addr
 
@@ -125,6 +130,19 @@ class AdminConfig:
         except ValueError as e:
             print('Could not parse "vpn_subnet":', e)
             sys.exit(1)
+
+        self.compression = None
+        if 'compression' in cfg_json:
+            assert type(cfg_json['compression']) is str, 'Key "compression" expected to be of type str'
+            compression_map = {
+                'off': 0,
+                'zlib_fast': 1,
+                'zlib_best': 9,
+                'lzo_fast': 10,
+                'lzo_best': 11
+            }
+            assert cfg_json['compression'] in compression_map.keys(), 'Did not understand "compression" value "%s". Valid values are %s' % (cfg_json['compression'], compression_map.keys())
+            self.compression = compression_map[cfg_json['compression']]
 
         assert 'nodes' in cfg_json, 'expected key "nodes" not found in config'
         assert type(cfg_json['nodes']) is dict, 'Key "nodes" expected to be a dictionary'
