@@ -94,15 +94,17 @@ class NodeConfig:
             assert type(node_json['bind_to_interface']) is str, 'Node "%s": key "bind_to_interface" expected to be of type str' % node_name
             self.bind_to_interface = node_json['bind_to_interface']
 
-        self.provide_subnet_from_vpn = None
-        if 'provide_subnet_from_vpn' in node_json:
-            assert type(node_json['provide_subnet_from_vpn']) is str, 'Node "%s": key "provide_subnet_from_vpn" expected to be of type str' % node_name
-            self.provide_subnet_from_vpn = ipaddress.ip_network(node_json['provide_subnet_from_vpn'])
+        self.provide_internet_to_vpn = False
+        if 'provide_internet_to_vpn' in node_json:
+            assert type(node_json['provide_internet_to_vpn']) is bool, 'Node "%s": key "provide_internet_to_vpn" expected to be of type bool' % node_name
+            self.provide_internet_to_vpn = node_json['provide_internet_to_vpn']
 
-        self.provide_subnet_to_vpn = None
-        if 'provide_subnet_to_vpn' in node_json:
-            assert type(node_json['provide_subnet_to_vpn']) is str, 'Node "%s": key "provide_subnet_to_vpn" expected to be of type str' % node_name
-            self.provide_subnet_to_vpn = ipaddress.ip_network(node_json['provide_subnet_to_vpn'])
+        self.provide_internet_from_vpn = False
+        if 'provide_internet_from_vpn' in node_json:
+            assert type(node_json['provide_internet_from_vpn']) is bool, 'Node "%s": key "provide_internet_from_vpn" expected to be of type bool' % node_name
+            self.provide_internet_from_vpn = node_json['provide_internet_from_vpn']
+
+        assert not (self.provide_internet_to_vpn and self.provide_internet_from_vpn), 'Cannot enable both "provide_internet_to_vpn" and "provide_internet_from_vpn"'
 
         self.ip_address = ipaddress.ip_network(vpn_subnet.exploded)
         self.ip_address.network_address = node_addr
@@ -221,13 +223,19 @@ try:
                 tinc_up.write('ip link set $INTERFACE up\n')
                 tinc_up.write('ip addr add %s/32 dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
                 tinc_up.write('ip route add %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
-                # if node_cfg.provide_subnet_from_vpn:
-                #     tinc_up.write('ip route add %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
-                # tinc_up.write('ifconfig $INTERFACE %s netmask %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
+                if node_cfg.provide_internet_from_vpn:
+                    tinc_up.write('ip route add default dev $INTERFACE\n')
+                if node.cfg.provide_internet_to_vpn:
+                    tinc_up.write('DEFAULT_IFACE=$(ip route list | awk \'/default/ { print $5 }\')\n')
+                    tinc_up.write('iptables -t nat -A POSTROUTING -o $DEFAULT_IFACE -j MASQUERADE\n')
+
             elif node_cfg.os == 'darwin':
+                assert not node_cfg.provide_internet_from_vpn, 'Not implemented yet: "provide_internet_from_vpn" for os "%s"' % node_cfg.os
+                assert not node_cfg.provide_internet_to_vpn, 'Not implemented yet: "provide_internet_to_vpn" for os "%s"' % node_cfg.os
                 tinc_up.write('#!/bin/bash\n')
                 tinc_up.write('ifconfig $INTERFACE inet %s %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
                 tinc_up.write('route -n add -net %s %s\n' % (node_cfg.ip_address.supernet(0).exploded, node_cfg.ip_address.network_address.exploded))
+            
             else:
                 assert False, 'Unknown OS "%s"' % node_cfg.os
         os.chmod('%s/tinc-up' % node_path, 0o755)
@@ -236,14 +244,22 @@ try:
         with open('%s/tinc-down' % node_path, 'w') as tinc_down:
             if node_cfg.os == 'linux':
                 tinc_down.write('#!/bin/bash\n')
-                # if node_cfg.provide_subnet_from_vpn:
-                #     tinc_down.write('ip route del %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
+                if node.cfg.provide_internet_to_vpn:
+                    tinc_down.write('DEFAULT_IFACE=$(ip route list | awk \'/default/ { print $5 }\')\n')
+                    tinc_down.write('iptables -t nat -D POSTROUTING -o $DEFAULT_IFACE -j MASQUERADE\n')
+                if node_cfg.provide_internet_from_vpn:
+                    tinc_up.write('ip route del default dev $INTERFACE\n')
                 tinc_down.write('ip route del %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
                 tinc_down.write('ip addr del %s/32 dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
                 tinc_down.write('ip link set $INTERFACE down\n')
+            
             elif node_cfg.os == 'darwin':
+                assert not node_cfg.provide_internet_from_vpn, 'Not implemented yet: "provide_internet_from_vpn" for os "%s"' % node_cfg.os
+                assert not node_cfg.provide_internet_to_vpn, 'Not implemented yet: "provide_internet_to_vpn" for os "%s"' % node_cfg.os
                 tinc_down.write('#!/bin/bash\n')
+                tinc_down.write('route -n delete -net %s %s\n' % (node_cfg.ip_address.supernet(0).exploded, node_cfg.ip_address.network_address.exploded))
                 tinc_down.write('ifconfig $INTERFACE down\n')
+            
             else:
                 assert False, 'Unknown OS "%s"' % node_cfg.os
         os.chmod('%s/tinc-down' % node_path, 0o755)
