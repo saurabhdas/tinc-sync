@@ -45,6 +45,15 @@ function_update() {{
     mv /tmp/{0}-{2}-new.tar.bz2 /tmp/{0}-{2}-old.tar.bz2
     ls {4}/{0}/ | grep -v "rsa_key.priv" | grep -v "rsa_key.pub" | xargs rm -fr
     tar -xf /tmp/{0}-{2}-old.tar.bz2 -C {4}/{0}
+
+    echo "$(date) {0}: ""Updating DNS entries" >> /tmp/tinc-sync.log
+    if [ -f {4}/{0}/dns_entries ]; then
+        if [ -f /etc/hosts ]; then
+            sed "/# Added by tinc-sync network={0}/d" -i /etc/hosts
+        fi
+        cat {4}/{0}/dns_entries >> /etc/hosts
+    fi
+
     echo "$(date) {0}: ""Finished admin-up script" >> /tmp/tinc-sync.log
     exit 0
 }}
@@ -229,6 +238,8 @@ try:
                 tinc_up.write('ip link set $INTERFACE up\n')
                 tinc_up.write('ip addr add %s/32 dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
                 tinc_up.write('ip route add %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
+                tinc_up.write('if [ -f %s/%s/dns_entries ]; then cat %s/%s/dns_entries >> /etc/hosts; fi\n' % (node_cfg.tinc_cfg_root, cfg.network_name, node_cfg.tinc_cfg_root, cfg.network_name))
+
                 if node_cfg.provide_internet_from_vpn:
                     tinc_up.write('ip route add default dev $INTERFACE\n')
                 if node_cfg.provide_internet_to_vpn:
@@ -241,7 +252,8 @@ try:
                 tinc_up.write('#!/bin/bash\n')
                 tinc_up.write('ifconfig $INTERFACE inet %s %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
                 tinc_up.write('route -n add -net %s %s\n' % (node_cfg.ip_address.supernet(0).exploded, node_cfg.ip_address.network_address.exploded))
-            
+                tinc_up.write('if [ -f %s/%s/dns_entries ]; then cat %s/%s/dns_entries >> /etc/hosts; fi\n' % (node_cfg.tinc_cfg_root, cfg.network_name, node_cfg.tinc_cfg_root, cfg.network_name))            
+
             else:
                 assert False, 'Unknown OS "%s"' % node_cfg.os
         os.chmod('%s/tinc-up' % node_path, 0o755)
@@ -258,6 +270,7 @@ try:
                 tinc_down.write('ip route del %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
                 tinc_down.write('ip addr del %s/32 dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
                 tinc_down.write('ip link set $INTERFACE down\n')
+                tinc_down.write('if [ -f /etc/hosts ]; then sed "/# Added by tinc-sync network=%s/d" -i /etc/hosts; fi\n' % cfg.network_name)
             
             elif node_cfg.os == 'darwin':
                 assert not node_cfg.provide_internet_from_vpn, 'Not implemented yet: "provide_internet_from_vpn" for os "%s"' % node_cfg.os
@@ -265,6 +278,7 @@ try:
                 tinc_down.write('#!/bin/bash\n')
                 tinc_down.write('route -n delete -net %s %s\n' % (node_cfg.ip_address.supernet(0).exploded, node_cfg.ip_address.network_address.exploded))
                 tinc_down.write('ifconfig $INTERFACE down\n')
+                tinc_down.write('if [ -f /etc/hosts ]; then sed "/# Added by tinc-sync network=%s/d" -i /etc/hosts; fi\n' % cfg.network_name)
             
             else:
                 assert False, 'Unknown OS "%s"' % node_cfg.os
