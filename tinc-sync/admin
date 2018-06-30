@@ -312,11 +312,14 @@ try:
 
         # Write the DNS entries
         with open('%s/dns_entries' % cfg.output_path, 'a') as dns_entries:
-            dns_entries.write('%s %s.%s # Added by tinc-sync network=%s' % (node_cfg.ip_address.network_address.exploded, node_name, cfg.network_name, cfg.network_name))
+            dns_entries.write('%s %s.%s # Added by tinc-sync network=%s\n' % (node_cfg.ip_address.network_address.exploded, node_name, cfg.network_name, cfg.network_name))
 
     # Copy the hosts file to each node and tarzip it up
     for node_name, node_cfg in cfg.nodes.items():
         node_path = '%s/%s' % (cfg.output_path, node_name)
+
+        if node_cfg.resolve_hosts_locally:
+            shutil.copyfile('%s/dns_entries' % cfg.output_path, '%s/dns_entries' % node_path)
 
         shutil.copytree('%s/hosts' % cfg.output_path, '%s/hosts' % node_path)
         if node_name != cfg.admin_node and node_cfg.auto_update:
