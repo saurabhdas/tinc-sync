@@ -225,7 +225,7 @@ try:
                 tinc_up.write('ip route add %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
                 if node_cfg.provide_internet_from_vpn:
                     tinc_up.write('ip route add default dev $INTERFACE\n')
-                if node.cfg.provide_internet_to_vpn:
+                if node_cfg.provide_internet_to_vpn:
                     tinc_up.write('DEFAULT_IFACE=$(ip route list | awk \'/default/ { print $5 }\')\n')
                     tinc_up.write('iptables -t nat -A POSTROUTING -o $DEFAULT_IFACE -j MASQUERADE\n')
 
@@ -244,7 +244,7 @@ try:
         with open('%s/tinc-down' % node_path, 'w') as tinc_down:
             if node_cfg.os == 'linux':
                 tinc_down.write('#!/bin/bash\n')
-                if node.cfg.provide_internet_to_vpn:
+                if node_cfg.provide_internet_to_vpn:
                     tinc_down.write('DEFAULT_IFACE=$(ip route list | awk \'/default/ { print $5 }\')\n')
                     tinc_down.write('iptables -t nat -D POSTROUTING -o $DEFAULT_IFACE -j MASQUERADE\n')
                 if node_cfg.provide_internet_from_vpn:
