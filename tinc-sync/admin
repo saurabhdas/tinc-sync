@@ -92,7 +92,7 @@ class NodeConfig:
         self.bind_to_interface = None
         if 'bind_to_interface' in node_json:
             assert type(node_json['bind_to_interface']) is str, 'Node "%s": key "bind_to_interface" expected to be of type str' % node_name
-            self.bind_to_interface = ipaddress.ip_address(node_json['bind_to_interface'])
+            self.bind_to_interface = node_json['bind_to_interface']
 
         self.provide_subnet_from_vpn = None
         if 'provide_subnet_from_vpn' in node_json:
@@ -200,7 +200,7 @@ try:
             tinc_conf.write('AddressFamily = ipv4\n')
 
             if node_cfg.bind_to_interface:
-                tinc_conf.write('BindToInterface = %s\n' % node_cfg.bind_to_interface.exploded)
+                tinc_conf.write('BindToInterface = %s\n' % node_cfg.bind_to_interface)
 
             for connect_to_name in node_cfg.connect_to:
                 tinc_conf.write('ConnectTo = %s\n' % connect_to_name)
