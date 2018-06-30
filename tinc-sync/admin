@@ -342,6 +342,8 @@ try:
 
         try:
             command = ['tar', '-C', node_path, '-cjf', '%s/%s.tar.bz2' % (cfg.output_path, node_name), 'hosts', 'tinc.conf', 'tinc-up', 'tinc-down']
+            if node_cfg.resolve_hosts_locally:
+                command.append('dns_entries')
             subprocess.run(' '.join(command), shell=True, check=True)
         except subprocess.CalledProcessError as e:
             print('ERROR: Could not compress bootstrap archive.')
