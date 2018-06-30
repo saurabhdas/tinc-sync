@@ -221,8 +221,8 @@ try:
                 tinc_up.write('ip link set $INTERFACE up\n')
                 tinc_up.write('ip addr add %s dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
                 tinc_up.write('ip route add %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
-                if node_cfg.provide_subnet_from_vpn:
-                    tinc_up.write('ip route add %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
+                # if node_cfg.provide_subnet_from_vpn:
+                #     tinc_up.write('ip route add %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
                 # tinc_up.write('ifconfig $INTERFACE %s netmask %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
             elif node_cfg.os == 'darwin':
                 tinc_up.write('#!/bin/bash\n')
@@ -236,8 +236,8 @@ try:
         with open('%s/tinc-down' % node_path, 'w') as tinc_down:
             if node_cfg.os == 'linux':
                 tinc_down.write('#!/bin/bash\n')
-                if node_cfg.provide_subnet_from_vpn:
-                    tinc_down.write('ip route del %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
+                # if node_cfg.provide_subnet_from_vpn:
+                #     tinc_down.write('ip route del %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
                 tinc_down.write('ip route del %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
                 tinc_down.write('ip addr del %s dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
                 tinc_down.write('ip link set $INTERFACE down\n')
