@@ -47,10 +47,10 @@ function_update() {{
     tar -xf /tmp/{0}-{2}-old.tar.bz2 -C {4}/{0}
 
     echo "$(date) {0}: ""Updating DNS entries" >> /tmp/tinc-sync.log
+    if [ -f /etc/hosts ]; then
+        sed "/# Added by tinc-sync network={0}/d" -i /etc/hosts
+    fi
     if [ -f {4}/{0}/dns_entries ]; then
-        if [ -f /etc/hosts ]; then
-            sed "/# Added by tinc-sync network={0}/d" -i /etc/hosts
-        fi
         cat {4}/{0}/dns_entries >> /etc/hosts
     fi
 
