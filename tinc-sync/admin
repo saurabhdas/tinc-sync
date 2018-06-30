@@ -239,7 +239,7 @@ try:
                 # if node_cfg.provide_subnet_from_vpn:
                 #     tinc_down.write('ip route del %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
                 tinc_down.write('ip route del %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
-                tinc_down.write('ip addr del %s dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
+                tinc_down.write('ip addr del %s/32 dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
                 tinc_down.write('ip link set $INTERFACE down\n')
             elif node_cfg.os == 'darwin':
                 tinc_down.write('#!/bin/bash\n')
