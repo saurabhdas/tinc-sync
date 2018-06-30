@@ -219,7 +219,7 @@ try:
             if node_cfg.os == 'linux':
                 tinc_up.write('#!/bin/bash\n')
                 tinc_up.write('ip link set $INTERFACE up\n')
-                tinc_up.write('ip addr add %s dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
+                tinc_up.write('ip addr add %s/32 dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
                 tinc_up.write('ip route add %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
                 # if node_cfg.provide_subnet_from_vpn:
                 #     tinc_up.write('ip route add %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
