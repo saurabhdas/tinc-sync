@@ -271,8 +271,8 @@ try:
 
             hosts_conf.write('Subnet = %s\n' % node_cfg.ip_address.network_address.exploded)
 
-            if node_cfg.provide_subnet_to_vpn:
-                hosts_conf.write('Subnet = %s\n' % node_cfg.provide_subnet_to_vpn.exploded)
+            if node_cfg.provide_internet_to_vpn:
+                hosts_conf.write('Subnet = 0.0.0.0/0\n')
 
             pub_key_name = '%s/%s.pub' % (cfg.public_keys_path, node_name)
             assert os.path.isfile(pub_key_name), 'Public key file "%s" not found' % pub_key_name
