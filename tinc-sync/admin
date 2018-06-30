@@ -92,7 +92,17 @@ class NodeConfig:
         self.bind_to_interface = None
         if 'bind_to_interface' in node_json:
             assert type(node_json['bind_to_interface']) is str, 'Node "%s": key "bind_to_interface" expected to be of type str' % node_name
-            self.bind_to_interface = node_json['bind_to_interface']
+            self.bind_to_interface = ipaddress.ip_address(node_json['bind_to_interface'])
+
+        self.provide_subnet_from_vpn = None
+        if 'provide_subnet_from_vpn' in node_json:
+            assert type(node_json['provide_subnet_from_vpn']) is str, 'Node "%s": key "provide_subnet_from_vpn" expected to be of type str' % node_name
+            self.provide_subnet_from_vpn = ipaddress.ip_network(node_json['provide_subnet_from_vpn'])
+
+        self.provide_subnet_to_vpn = None
+        if 'provide_subnet_to_vpn' in node_json:
+            assert type(node_json['provide_subnet_to_vpn']) is str, 'Node "%s": key "provide_subnet_to_vpn" expected to be of type str' % node_name
+            self.provide_subnet_to_vpn = ipaddress.ip_network(node_json['provide_subnet_to_vpn'])
 
         self.ip_address = ipaddress.ip_network(vpn_subnet.exploded)
         self.ip_address.network_address = node_addr
@@ -190,7 +200,7 @@ try:
             tinc_conf.write('AddressFamily = ipv4\n')
 
             if node_cfg.bind_to_interface:
-                tinc_conf.write('BindToInterface = %s\n' % node_cfg.bind_to_interface)
+                tinc_conf.write('BindToInterface = %s\n' % node_cfg.bind_to_interface.exploded)
 
             for connect_to_name in node_cfg.connect_to:
                 tinc_conf.write('ConnectTo = %s\n' % connect_to_name)
@@ -206,10 +216,16 @@ try:
 
         # Writing tinc-up
         with open('%s/tinc-up' % node_path, 'w') as tinc_up:
-            tinc_up.write('#!/bin/bash\n')
             if node_cfg.os == 'linux':
-                tinc_up.write('ifconfig $INTERFACE %s netmask %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
+                tinc_up.write('#!/bin/bash\n')
+                tinc_up.write('ip link set $INTERFACE up\n')
+                tinc_up.write('ip addr add %s dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
+                tinc_up.write('ip route add %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
+                if node_cfg.provide_subnet_from_vpn:
+                    tinc_up.write('ip route add %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
+                # tinc_up.write('ifconfig $INTERFACE %s netmask %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
             elif node_cfg.os == 'darwin':
+                tinc_up.write('#!/bin/bash\n')
                 tinc_up.write('ifconfig $INTERFACE inet %s %s up\n' % (node_cfg.ip_address.network_address.exploded, node_cfg.ip_address.netmask.exploded))
                 tinc_up.write('route -n add -net %s %s\n' % (node_cfg.ip_address.supernet(0).exploded, node_cfg.ip_address.network_address.exploded))
             else:
@@ -218,8 +234,18 @@ try:
 
         # Writing tinc-down
         with open('%s/tinc-down' % node_path, 'w') as tinc_down:
-            tinc_down.write('#!/bin/bash\n')
-            tinc_down.write('ifconfig $INTERFACE down\n')
+            if node_cfg.os == 'linux':
+                tinc_down.write('#!/bin/bash\n')
+                if node_cfg.provide_subnet_from_vpn:
+                    tinc_up.write('ip route del %s dev $INTERFACE\n' % node_cfg.provide_subnet_from_vpn.exploded)
+                tinc_up.write('ip route del %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
+                tinc_up.write('ip addr del %s dev $INTERFACE\n' % node_cfg.ip_address.network_address.exploded)
+                tinc_up.write('ip link set $INTERFACE down\n')
+            elif node_cfg.os == 'darwin':
+                tinc_down.write('#!/bin/bash\n')
+                tinc_down.write('ifconfig $INTERFACE down\n')
+            else:
+                assert False, 'Unknown OS "%s"' % node_cfg.os
         os.chmod('%s/tinc-down' % node_path, 0o755)
 
         # Writing hosts files
@@ -229,12 +255,16 @@ try:
 
             hosts_conf.write('Subnet = %s\n' % node_cfg.ip_address.network_address.exploded)
 
+            if node_cfg.provide_subnet_to_vpn:
+                hosts_conf.write('Subnet = %s\n' % node_cfg.provide_subnet_to_vpn.exploded)
+
             pub_key_name = '%s/%s.pub' % (cfg.public_keys_path, node_name)
             assert os.path.isfile(pub_key_name), 'Public key file "%s" not found' % pub_key_name
             pubkey = pathlib.Path(pub_key_name).read_text()
             hosts_conf.write(pubkey)
             hosts_conf.write('\n')
 
+            # Write authorized keys
             if node_name != cfg.admin_node and node_cfg.auto_update:
                 try:
                     command = ['ssh-keygen', '-f', pub_key_name, '-i -m pem']

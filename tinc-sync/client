@@ -10,12 +10,12 @@ import argparse, os, sys, subprocess, pathlib, traceback, shutil
 
 # Setup and parse command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('--tinc-cfg-root', help='where does tinc look for configuration', type=str, default='/usr/local/etc/tinc')
+parser.add_argument('-c', '--tinc-cfg-root', help='where does tinc look for configuration', type=str, default='/usr/local/etc/tinc')
 parser.add_argument('-l', '--list', help='list configured tinc vpn networks on this client', action='store_true')
 parser.add_argument('-n', '--network', help='name of the network to administer', type=str)
-parser.add_argument('--add', help='add a new network with name specified by --network', action='store_true')
-parser.add_argument('--bootstrap', help='do a manual sync from the provided file', type=str)
-parser.add_argument('--run', help='run the network in detached mode for debugging purposes', action='store_true')
+parser.add_argument('-a', '--add', help='add a new network with name specified by --network', action='store_true')
+parser.add_argument('-b', '--bootstrap', help='do a manual sync from the provided file', type=str)
+parser.add_argument('-r', '--run', help='run the network in detached mode for debugging purposes', action='store_true')
 args = parser.parse_args()
 
 try:
