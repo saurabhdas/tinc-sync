@@ -62,9 +62,9 @@ class NodeConfig:
             assert type(node_json['bind_to_interface']) is str, 'Node "%s": key "bind_to_interface" expected to be of type str' % node_name
             self.bind_to_interface = node_json['bind_to_interface']
 
-        self.provide_internet_to_vpn = False
+        self.provide_internet_to_vpn = None
         if 'provide_internet_to_vpn' in node_json:
-            assert type(node_json['provide_internet_to_vpn']) is bool, 'Node "%s": key "provide_internet_to_vpn" expected to be of type bool' % node_name
+            assert type(node_json['provide_internet_to_vpn']) is str, 'Node "%s": key "provide_internet_to_vpn" expected to be of type str' % node_name
             self.provide_internet_to_vpn = node_json['provide_internet_to_vpn']
 
         self.provide_internet_from_vpn = False
@@ -76,7 +76,6 @@ class NodeConfig:
         if 'resolve_hosts_locally' in node_json:
             assert type(node_json['resolve_hosts_locally']) is bool, 'Node "%s": key "resolve_hosts_locally" expected to be of type bool' % node_name
             self.resolve_hosts_locally = node_json['resolve_hosts_locally']
-
 
         assert not (self.provide_internet_to_vpn and self.provide_internet_from_vpn), 'Cannot enable both "provide_internet_to_vpn" and "provide_internet_from_vpn"'
 
@@ -246,8 +245,7 @@ try:
                 if node_cfg.provide_internet_from_vpn:
                     tinc_up.write('ip route add default dev $INTERFACE\n')
                 if node_cfg.provide_internet_to_vpn:
-                    tinc_up.write('DEFAULT_IFACE=$(ip route list | awk \'/default/ { print $5 }\')\n')
-                    tinc_up.write('iptables -t nat -A POSTROUTING -o $DEFAULT_IFACE -j MASQUERADE\n')
+                    tinc_up.write('iptables -t nat -A POSTROUTING -o $%s -j MASQUERADE\n' % node_cfg.provide_internet_to_vpn)
 
             elif node_cfg.os == 'darwin':
                 assert not node_cfg.provide_internet_from_vpn, 'Not implemented yet: "provide_internet_from_vpn" for os "%s"' % node_cfg.os
@@ -266,8 +264,7 @@ try:
             if node_cfg.os == 'linux':
                 tinc_down.write('#!/bin/bash\n')
                 if node_cfg.provide_internet_to_vpn:
-                    tinc_down.write('DEFAULT_IFACE=$(ip route list | awk \'/default/ { print $5 }\')\n')
-                    tinc_down.write('iptables -t nat -D POSTROUTING -o $DEFAULT_IFACE -j MASQUERADE\n')
+                    tinc_down.write('iptables -t nat -D POSTROUTING -o %s -j MASQUERADE\n' % node_cfg.provide_internet_to_vpn)
                 if node_cfg.provide_internet_from_vpn:
                     tinc_down.write('ip route del default dev $INTERFACE\n')
                 tinc_down.write('ip route del %s dev $INTERFACE\n' % cfg.vpn_subnet.exploded)
