@@ -50,7 +50,7 @@ class NodeConfig:
         self.public_ips = []
         if 'public_ips' in node_json:
             assert type(node_json['public_ips'] is list), 'Node "%s": key "public_ips" expected to be of type list' % node_name
-            self.public_ips = [ipaddress.ip_adress(x) for x in node_json['public_ips']]
+            self.public_ips = [ipaddress.ip_address(x) for x in node_json['public_ips']]
 
         self.local_discovery = False
         if 'local_discovery' in node_json:
