@@ -53,7 +53,7 @@ class NodeConfig:
             try:
                 self.public_ips = [ipaddress.ip_address(x) for x in node_json['public_ips']]
             except ValueError as e:
-                print('For node "%s" key "public_ips"' % node_name:, e)
+                print('For node "%s" key "public_ips":' % node_name, e)
                 sys.exit(1)
 
         self.local_discovery = False
@@ -72,7 +72,7 @@ class NodeConfig:
             try:
                 self.vpn_provides_subnets_to_node = [ipaddress.ip_network(x) for x in node_json['vpn_provides_subnets_to_node']]
             except ValueError as e:
-                print('For node "%s" key "vpn_provides_subnets_to_node"' % node_name:, e)
+                print('For node "%s" key "vpn_provides_subnets_to_node":' % node_name, e)
                 sys.exit(1)
 
         self.node_provides_subnets_to_vpn = []
