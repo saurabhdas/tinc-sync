@@ -77,8 +77,6 @@ class NodeConfig:
             assert type(node_json['resolve_hosts_locally']) is bool, 'Node "%s": key "resolve_hosts_locally" expected to be of type bool' % node_name
             self.resolve_hosts_locally = node_json['resolve_hosts_locally']
 
-        assert not (self.provide_internet_to_vpn and self.provide_internet_from_vpn), 'Cannot enable both "provide_internet_to_vpn" and "provide_internet_from_vpn"'
-
         self.ip_address = ipaddress.ip_network(vpn_subnet.exploded)
         self.ip_address.network_address = node_addr
 
