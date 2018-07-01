@@ -65,12 +65,12 @@ class NodeConfig:
         self.vpn_provides_subnets_to_node = []
         if 'vpn_provides_subnets_to_node' in node_json:
             assert type(node_json['vpn_provides_subnets_to_node']) is list, 'Node "%s": key "vpn_provides_subnets_to_node" expected to be of type list' % node_name
-            self.vpn_provides_subnets_to_node = [ipaddress.ipnetwork(x) for x in node_json['vpn_provides_subnets_to_node']]
+            self.vpn_provides_subnets_to_node = [ipaddress.ip_network(x) for x in node_json['vpn_provides_subnets_to_node']]
 
         self.node_provides_subnets_to_vpn = []
         if 'node_provides_subnets_to_vpn' in node_json:
             assert type(node_json['node_provides_subnets_to_vpn']) is list, 'Node "%s": key "node_provides_subnets_to_vpn" expected to be of type list' % node_name
-            self.node_provides_subnets_to_vpn = { x.split(':')[0]: ipaddress.ipnetwork(x.split(':')[1]) for x in node_json['node_provides_subnets_to_vpn'] }
+            self.node_provides_subnets_to_vpn = { x.split(':')[0]: ipaddress.ip_network(x.split(':')[1]) for x in node_json['node_provides_subnets_to_vpn'] }
 
         self.resolve_hosts_locally = False
         if 'resolve_hosts_locally' in node_json:
