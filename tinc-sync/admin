@@ -78,7 +78,14 @@ class NodeConfig:
         self.node_provides_subnets_to_vpn = []
         if 'node_provides_subnets_to_vpn' in node_json:
             assert type(node_json['node_provides_subnets_to_vpn']) is list, 'Node "%s": key "node_provides_subnets_to_vpn" expected to be of type list' % node_name
-            self.node_provides_subnets_to_vpn = { x.split(':')[0]: ipaddress.ip_network(x.split(':')[1]) for x in node_json['node_provides_subnets_to_vpn'] }
+            try:
+                self.node_provides_subnets_to_vpn = { x.split(':')[0]: ipaddress.ip_network(x.split(':')[1]) for x in node_json['node_provides_subnets_to_vpn'] }
+            except IndexError as e:
+                print('For node "%s" key "node_provides_subnets_to_vpn": expected format is "iface:subnet"')
+                sys.exit(1)
+            except ValueError as e:
+                print('For node "%s" key "node_provides_subnets_to_vpn":' % node_name, e)
+                sys.exit(1)
 
         self.resolve_hosts_locally = False
         if 'resolve_hosts_locally' in node_json:
