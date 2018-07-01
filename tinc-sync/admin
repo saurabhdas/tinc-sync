@@ -281,7 +281,7 @@ try:
             if node_cfg.os == 'linux':
                 tinc_down.write('#!/bin/bash\n')
                 for iface,sn in node_cfg.node_provides_subnets_to_vpn:
-                    tinc_up.write('iptables -t nat -D POSTROUTING -i $INTERFACE  -o %s -j MASQUERADE\n' % iface)
+                    tinc_down.write('iptables -t nat -D POSTROUTING -i $INTERFACE  -o %s -j MASQUERADE\n' % iface)
 
                 for sn in node_cfg.vpn_provides_subnets_to_node:
                     if sn.exploded == '0.0.0.0/0':
