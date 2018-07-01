@@ -50,7 +50,7 @@ class NodeConfig:
         self.public_ips = []
         if 'public_ips' in node_json:
             assert type(node_json['public_ips'] is list), 'Node "%s": key "public_ips" expected to be of type list' % node_name
-            self.public_ips = node_json['public_ips']
+            self.public_ips = [ipaddress.ip_adress(x) for x in node_json['public_ips']]
 
         self.local_discovery = False
         if 'local_discovery' in node_json:
@@ -62,15 +62,15 @@ class NodeConfig:
             assert type(node_json['bind_to_interface']) is str, 'Node "%s": key "bind_to_interface" expected to be of type str' % node_name
             self.bind_to_interface = node_json['bind_to_interface']
 
-        self.provide_internet_to_vpn = None
-        if 'provide_internet_to_vpn' in node_json:
-            assert type(node_json['provide_internet_to_vpn']) is str, 'Node "%s": key "provide_internet_to_vpn" expected to be of type str' % node_name
-            self.provide_internet_to_vpn = node_json['provide_internet_to_vpn']
+        self.vpn_provides_subnets_to_node = []
+        if 'vpn_provides_subnets_to_node' in node_json:
+            assert type(node_json['vpn_provides_subnets_to_node']) is list, 'Node "%s": key "vpn_provides_subnets_to_node" expected to be of type list' % node_name
+            self.vpn_provides_subnets_to_node = [ipaddress.ipnetwork(x) for x in node_json['vpn_provides_subnets_to_node']]
 
-        self.provide_internet_from_vpn = False
-        if 'provide_internet_from_vpn' in node_json:
-            assert type(node_json['provide_internet_from_vpn']) is bool, 'Node "%s": key "provide_internet_from_vpn" expected to be of type bool' % node_name
-            self.provide_internet_from_vpn = node_json['provide_internet_from_vpn']
+        self.node_provides_subnets_to_vpn = []
+        if 'node_provides_subnets_to_vpn' in node_json:
+            assert type(node_json['node_provides_subnets_to_vpn']) is list, 'Node "%s": key "node_provides_subnets_to_vpn" expected to be of type list' % node_name
+            self.node_provides_subnets_to_vpn = { x.split(':')[0]: ipaddress.ipnetwork(x.split(':')[1]) for x in node_json['node_provides_subnets_to_vpn'] }
 
         self.resolve_hosts_locally = False
         if 'resolve_hosts_locally' in node_json:
@@ -287,7 +287,7 @@ try:
         # Writing hosts files
         with open('%s/hosts/%s' % (cfg.output_path, node_name), 'w') as hosts_conf:
             for public_ip in node_cfg.public_ips:
-                hosts_conf.write('Address = %s\n' % public_ip)
+                hosts_conf.write('Address = %s\n' % public_ip.exploded)
 
             hosts_conf.write('Subnet = %s\n' % node_cfg.ip_address.network_address.exploded)
 
