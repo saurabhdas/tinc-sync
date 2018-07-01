@@ -50,7 +50,10 @@ class NodeConfig:
         self.public_ips = []
         if 'public_ips' in node_json:
             assert type(node_json['public_ips'] is list), 'Node "%s": key "public_ips" expected to be of type list' % node_name
-            self.public_ips = [ipaddress.ip_address(x) for x in node_json['public_ips']]
+            try:
+                self.public_ips = [ipaddress.ip_address(x) for x in node_json['public_ips']]
+            except ValueError e:
+                print('For node "%s" key "public_ips" % node_name:', e)
 
         self.local_discovery = False
         if 'local_discovery' in node_json:
@@ -65,7 +68,10 @@ class NodeConfig:
         self.vpn_provides_subnets_to_node = []
         if 'vpn_provides_subnets_to_node' in node_json:
             assert type(node_json['vpn_provides_subnets_to_node']) is list, 'Node "%s": key "vpn_provides_subnets_to_node" expected to be of type list' % node_name
-            self.vpn_provides_subnets_to_node = [ipaddress.ip_network(x) for x in node_json['vpn_provides_subnets_to_node']]
+            try:
+                self.vpn_provides_subnets_to_node = [ipaddress.ip_network(x) for x in node_json['vpn_provides_subnets_to_node']]
+            except ValueError e:
+                print('For node "%s" key "public_ips" % node_name:', e)
 
         self.node_provides_subnets_to_vpn = []
         if 'node_provides_subnets_to_vpn' in node_json:
